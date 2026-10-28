@@ -672,7 +672,7 @@ function viewBeheerCode(){
   });
 }
 
-let getoond = null, bewerkToegang = null;
+let getoond = null, bewerkToegang = null, pwToegang = null;
 const ROLNAAM = {leiding:'Leiding', penningmeester:'Penningmeester'};
 async function viewBeheer(){
   zetKop('Beheer'); document.title = 'Beheer';
@@ -702,7 +702,12 @@ async function viewBeheer(){
           <div class="rij tussen"><b>${esc(t.naam)}</b><span class="pill ${t.rol === 'penningmeester' ? 'warn' : ''}">${t.rol === 'penningmeester' ? '💶 ' : ''}${ROLNAAM[t.rol]}</span></div>
           ${t.rol === 'leiding' ? ((t.speltakken || []).length ? `<div class="takrij" style="margin:6px 0">${t.speltakken.map(n => `<span class="takpill">${badge(n, 22)}${esc(n)}</span>`).join('')}</div>` : '<div class="small" style="margin:4px 0">Alle speltakken</div>') : ''}
           <div class="muted small">${t.laatst_gebruikt ? 'Laatst ingelogd ' + esc(fmtMoment(t.laatst_gebruikt)) : 'Nog niet ingelogd'}</div>
-          <div class="rij" style="margin-top:8px"><button class="btn sec klein-knop" data-act="pw">🔑 Nieuw wachtwoord</button><button class="btn sec klein-knop" data-act="bewerk">Bewerken</button><button class="btn rood klein-knop" data-act="weg">Intrekken</button></div>
+          <div class="rij" style="margin-top:8px"><button class="btn sec klein-knop" data-act="pw">🔑 Wachtwoord wijzigen</button><button class="btn sec klein-knop" data-act="bewerk">Bewerken</button><button class="btn rood klein-knop" data-act="weg">Intrekken</button></div>
+          ${pwToegang === t.id ? `<form class="pwform" data-pw="${t.id}" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+            <label class="veld"><span>Nieuw wachtwoord voor ${esc(t.naam)}</span><span class="rij" style="flex-wrap:nowrap"><input type="text" name="pw" value="${esc(maakWachtwoord())}" autocomplete="off" autocapitalize="off" spellcheck="false" style="font-family:ui-monospace,Menlo,Consolas,monospace"><button type="button" class="icon" data-act="dobbel" title="Nieuw wachtwoord genereren" aria-label="Nieuw wachtwoord genereren">🎲</button></span></label>
+            <p class="muted small" style="margin:-8px 0 10px">Typ zelf een wachtwoord (minstens 8 tekens) of tik 🎲 voor een nieuw voorstel. Het oude wachtwoord werkt daarna direct niet meer.</p>
+            <div class="rij"><button class="btn">Wachtwoord instellen</button><button type="button" class="btn sec" data-act="annuleer">Annuleren</button></div>
+          </form>` : ''}
         </div>`).join('') : '<p class="muted">Nog geen toegangen. Maak hieronder de eerste aan.</p>'}</div>
     </div>
     <form class="card" id="nieuwtoeg"><h2>Nieuwe toegang</h2>
@@ -750,13 +755,10 @@ async function viewBeheer(){
     const b = ev.target.closest('[data-act]'); if (!b) return;
     const id = b.closest('[data-id]').dataset.id, t = o.toegangen.find(x => x.id === id);
     try {
-      if (b.dataset.act === 'bewerk') { bewerkToegang = id; return viewBeheer(); }
-      if (b.dataset.act === 'annuleer') { bewerkToegang = null; return viewBeheer(); }
-      if (b.dataset.act === 'pw') {
-        if (!confirm(`Nieuw wachtwoord voor ${t.naam}? Het oude wachtwoord werkt dan direct niet meer.`)) return;
-        const pw = maakWachtwoord(); await api.toegangOpslaan({id, naam:t.naam, rol:t.rol, wachtwoord:pw, speltakken:t.speltakken || []});
-        getoond = {naam:t.naam, pw}; viewBeheer(); window.scrollTo(0, 0);
-      }
+      if (b.dataset.act === 'bewerk') { bewerkToegang = id; pwToegang = null; return viewBeheer(); }
+      if (b.dataset.act === 'annuleer') { bewerkToegang = null; pwToegang = null; return viewBeheer(); }
+      if (b.dataset.act === 'pw') { pwToegang = id; bewerkToegang = null; await viewBeheer(); document.querySelector(`[data-pw="${id}"] input[name="pw"]`)?.select(); return; }
+      if (b.dataset.act === 'dobbel') { const inp = b.closest('form').querySelector('input[name="pw"]'); inp.value = maakWachtwoord(); return; }
       if (b.dataset.act === 'weg') {
         if (!confirm(`Toegang van ${t.naam} intrekken? Diegene wordt direct uitgelogd.`)) return;
         await api.toegangVerwijderen(id); toast('Toegang ingetrokken'); viewBeheer();
@@ -764,7 +766,15 @@ async function viewBeheer(){
     } catch (err) { toast(vriendelijk(err)); }
   });
   lijst.addEventListener('submit', async ev => {
-    ev.preventDefault(); const f = ev.target, id = f.dataset.id;
+    ev.preventDefault(); const f = ev.target;
+    if (f.dataset.pw) {
+      const t = o.toegangen.find(x => x.id === f.dataset.pw), pw = f.pw.value.trim();
+      if (pw.length < 8) return toast('Het wachtwoord moet minstens 8 tekens lang zijn.');
+      try { await api.toegangOpslaan({id:t.id, naam:t.naam, rol:t.rol, wachtwoord:pw, speltakken:t.speltakken || []}); pwToegang = null; getoond = {naam:t.naam, pw}; await viewBeheer(); window.scrollTo(0, 0); }
+      catch (err) { toast(vriendelijk(err)); }
+      return;
+    }
+    const id = f.dataset.id;
     try { await api.toegangOpslaan({id, naam:f.naam.value.trim(), rol:f.rol.value, speltakken:gekozenUit(f, 'tk')}); bewerkToegang = null; toast('Opgeslagen'); viewBeheer(); }
     catch (err) { toast(vriendelijk(err)); }
   });
