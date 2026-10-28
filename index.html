@@ -321,7 +321,7 @@ function demoApi(){
     async sjablonen(){ eis('leiding'); return {...load().sjablonen}; },
     async sjabloonOpslaan(tak, data){ eis('leiding'); const mt = info(tok()); if (mt.rol === 'leiding' && mt.speltakken.length && !mt.speltakken.includes(tak)) throw new Error('Je mag alleen sjablonen van jouw speltak(ken) aanpassen.'); const s = load(); if (data == null) delete s.sjablonen[tak]; else s.sjablonen[tak] = data; save(); },
     async bewijs(id){ const s = load(), a = s.aanmeldingen.find(x => x.id === id); if (!a) return null; const {iban, ...rest} = a; return {aanmelding:{...rest, iban_kort:ibanKort(a)}, evenement:s.evenementen.find(e => e.id === a.evenement_id)}; },
-    async kas(){ eis('leiding', 'penningmeester'); const s = load(), betalend = new Set(s.evenementen.filter(e => Number(e.kosten) > 0).map(e => e.id)); const toegestaan = new Set(s.evenementen.filter(e => mag(e.speltakken)).map(e => e.id)); return s.aanmeldingen.filter(a => betalend.has(a.evenement_id) && toegestaan.has(a.evenement_id)).map(({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt, iban, rekeninghouder, machtiging_op}) => ({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt, iban, rekeninghouder, machtiging_op})); },
+    async kas(){ eis('leiding', 'penningmeester'); const s = load(), betalend = new Set(s.evenementen.filter(e => Number(e.kosten) > 0).map(e => e.id)); const toegestaan = new Set(s.evenementen.filter(e => mag(e.speltakken)).map(e => e.id)); return s.aanmeldingen.filter(a => betalend.has(a.evenement_id) && toegestaan.has(a.evenement_id)).map(({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt, iban, rekeninghouder, machtiging_op}) => ({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt, iban:info(tok()).rol === 'leiding' ? null : iban, iban_kort:iban ? ibanKort({iban}) : null, rekeninghouder, machtiging_op})); },
     async kasBetaald(id, b){ eis('leiding', 'penningmeester'); const a0 = load().aanmeldingen.find(a => a.id === id); if (!mag(load().evenementen.find(e => e.id === a0?.evenement_id)?.speltakken)) throw new Error('Dit evenement hoort niet bij jouw speltak.'); Object.assign(load().aanmeldingen.find(a => a.id === id), {betaald:b, betaald_op:b ? new Date().toISOString() : null}); save(); },
     async evenementen(){ return [...load().evenementen].sort((a, b) => (a.datum || '9') < (b.datum || '9') ? -1 : 1); },
     async evenement(slug){ return load().evenementen.find(e => e.slug === slug) || null; },
@@ -921,7 +921,7 @@ async function viewAdmin(){
   const alle = await api.evenementen(), lijst = alle.filter(e => magTakken(e.speltakken));
   const tellingen = await Promise.all(lijst.map(e => api.bezetting(e.id)));
   $app.innerHTML = `<div class="rij tussen" style="margin-bottom:14px"><h1 style="margin:0">Evenementen</h1>
-      <div class="rij"><a class="btn" href="#/admin/nieuw">+ Nieuw</a><a class="btn sec" href="#/kas">💶 Penningmeester</a>${SESSIE?.rol === 'beheer' ? `<a class="btn sec" href="#/beheer">${GEAR} Beheer</a>` : ''}<button class="btn sec" id="uit">Uitloggen</button></div></div>
+      <div class="rij"><a class="btn" href="#/admin/nieuw">+ Nieuw</a><a class="btn sec" href="#/kas">💶 Betalingen</a>${SESSIE?.rol === 'beheer' ? `<a class="btn sec" href="#/beheer">${GEAR} Beheer</a>` : ''}<button class="btn sec" id="uit">Uitloggen</button></div></div>
     <p class="muted small" style="margin:-6px 0 ${mijnTakken() ? 4 : 14}px">Ingelogd als <b>${esc(SESSIE?.naam || '')}</b>${mijnTakken() ? ' · je beheert formulieren voor:' : ''}</p>
     ${mijnTakken() ? `<div class="takrij" style="margin:0 0 14px">${mijnTakken().map(n => `<span class="takpill">${badge(n, 24)}${esc(n)}</span>`).join('')}</div>` : ''}
     ${lijst.length ? lijst.map((e, i) => {
@@ -1218,6 +1218,7 @@ let kasFilter = {ev:'alle', st:'open', q:''};
 async function viewKas(){
   zetKop('Penningmeester'); document.title = 'Penningmeester ' + CONFIG.GROEP;
   const [evs, rijen, rol] = await Promise.all([api.evenementen(), api.kas(), api.rol()]);
+  if (rol !== 'penningmeester') zetKop('Betalingen');
   const E = Object.fromEntries(evs.map(e => [e.id, e]));
   const posten = rijen.filter(r => E[r.evenement_id] && Number(E[r.evenement_id].kosten) > 0)
     .map(r => ({...r, ev:E[r.evenement_id], bedrag:Number(E[r.evenement_id].kosten)}));
@@ -1225,17 +1226,18 @@ async function viewKas(){
   const telt = p => p.status === 'ingeschreven';
   const verwacht = posten.filter(telt), ontvangen = verwacht.filter(p => p.betaald), openP = verwacht.filter(p => !p.betaald);
   const terug = posten.filter(p => !telt(p) && p.betaald);
-  const betaalEvs = evs.filter(e => Number(e.kosten) > 0).sort((a, b) => (b.datum || '') < (a.datum || '') ? -1 : 1);
+  const machtiging = p => !!(p.iban || p.iban_kort);
+  const betaalEvs = evs.filter(e => Number(e.kosten) > 0 && magTakken(e.speltakken)).sort((a, b) => (b.datum || '') < (a.datum || '') ? -1 : 1);
   if (kasFilter.ev !== 'alle' && !E[kasFilter.ev]) kasFilter.ev = 'alle';
   const q = kasFilter.q.trim().toLowerCase();
   const zicht = posten.filter(p => (kasFilter.ev === 'alle' || p.evenement_id === kasFilter.ev)
     && (kasFilter.st === 'alle' || (kasFilter.st === 'open' && telt(p) && !p.betaald) || (kasFilter.st === 'betaald' && p.betaald && telt(p)) || (kasFilter.st === 'terug' && !telt(p) && p.betaald))
     && (!q || (p.naam + ' ' + p.email + ' ' + kenmerk(p) + ' ' + p.ev.titel).toLowerCase().includes(q)))
     .sort((a, b) => (a.ev.datum || '') === (b.ev.datum || '') ? a.naam.localeCompare(b.naam) : (b.ev.datum || '') < (a.ev.datum || '') ? -1 : 1);
-  const openInFilter = zicht.filter(p => telt(p) && !p.betaald && !p.iban);
+  const openInFilter = zicht.filter(p => telt(p) && !p.betaald && !machtiging(p));
   const evSel = kasFilter.ev !== 'alle' ? E[kasFilter.ev] : null;
   const bulkMail = openInFilter.length ? 'mailto:?bcc=' + encodeURIComponent([...new Set(openInFilter.map(p => p.email))].join(',')) + '&subject=' + encodeURIComponent('Betalingsherinnering' + (evSel ? ' ' + evSel.titel : ' ' + CONFIG.GROEP)) + '&body=' + encodeURIComponent(`Beste ouder/deelnemer,\n\nVolgens onze administratie staat er nog een betaling open${evSel ? ' voor ' + evSel.titel + ' (' + fmtEuro(evSel.kosten) + ')' : ''}. Wil je dit overmaken onder vermelding van het betaalkenmerk dat op je inschrijfbewijs staat?${evSel?.betaalinfo ? '\n\n' + evSel.betaalinfo : ''}\n\nHeb je al betaald? Dan kun je deze mail negeren.\n\nMet vriendelijke groet,\nPenningmeester ${CONFIG.GROEP}`) : '';
-  $app.innerHTML = `<div class="rij tussen" style="margin-bottom:14px"><h1 style="margin:0">💶 Penningmeester</h1>
+  $app.innerHTML = `<div class="rij tussen" style="margin-bottom:14px"><h1 style="margin:0">💶 ${rol === 'penningmeester' ? 'Penningmeester' : 'Betalingen'}</h1>
       <div class="rij">${rol === 'leiding' ? '<a class="btn sec" href="#/admin">Evenementen</a>' : ''}<button class="btn sec" id="uit">Uitloggen</button></div></div>
     <div class="stats">
       <div class="stat"><b>${fmtEuro(som(verwacht))}</b><span class="muted small">te ontvangen totaal</span></div>
@@ -1269,13 +1271,14 @@ async function viewKas(){
         return `<div class="aanm" data-id="${p.id}">
           <div class="rij tussen"><span class="naamrij">${(p.ev.speltakken || []).slice(0, 1).map(t => badge(t, 26)).join('')}<b>${esc(p.naam)}</b></span><b>${fmtEuro(p.bedrag)}</b></div>
           <div class="muted small">${esc(p.ev.titel)} · kenmerk <b style="color:var(--ink)">${kenmerk(p)}</b>${p.status !== 'ingeschreven' ? ` · <span style="color:var(--red)">${esc(p.status)}</span>` : ''}</div>
-          ${p.iban ? `<div class="small" style="margin-top:4px">🏦 <span style="font-family:ui-monospace,Menlo,Consolas,monospace">${esc(ibanMooi(p.iban))}</span> t.n.v. <b>${esc(p.rekeninghouder || '')}</b>${p.machtiging_op ? ` <span class="muted">· machtiging ${esc(fmtMoment(p.machtiging_op))}</span>` : ''}</div>` : (isIncasso(p.ev) ? '<div class="small" style="margin-top:4px;color:var(--red)">Geen machtiging (ingeschreven vóór de incasso aanstond)</div>' : '')}
+          ${machtiging(p) ? `<div class="small" style="margin-top:4px">🏦 <span style="font-family:ui-monospace,Menlo,Consolas,monospace">${esc(p.iban ? ibanMooi(p.iban) : p.iban_kort)}</span> t.n.v. <b>${esc(p.rekeninghouder || '')}</b>${p.machtiging_op ? ` <span class="muted">· machtiging ${esc(fmtMoment(p.machtiging_op))}</span>` : ''}</div>` : (isIncasso(p.ev) ? '<div class="small" style="margin-top:4px;color:var(--red)">Geen machtiging (ingeschreven vóór de incasso aanstond)</div>' : '')}
           <div class="rij" style="margin-top:8px">
-            <label class="check" style="margin:0"><input type="checkbox" data-betaald ${p.betaald ? 'checked' : ''}><span>${p.iban ? 'Afgeschreven' : 'Betaald'}${p.betaald && p.betaald_op ? ' <span class="muted small">op ' + esc(fmtMoment(p.betaald_op)) + '</span>' : ''}</span></label>
-            ${!p.betaald && telt(p) && !p.iban ? `<a class="btn sec" style="padding:6px 12px;font-size:14px;margin-left:auto" href="${herinner}">✉️ Herinnering</a>` : ''}
+            <label class="check" style="margin:0"><input type="checkbox" data-betaald ${p.betaald ? 'checked' : ''}><span>${machtiging(p) ? 'Afgeschreven' : 'Betaald'}${p.betaald && p.betaald_op ? ' <span class="muted small">op ' + esc(fmtMoment(p.betaald_op)) + '</span>' : ''}</span></label>
+            ${!p.betaald && telt(p) && !machtiging(p) ? `<a class="btn sec" style="padding:6px 12px;font-size:14px;margin-left:auto" href="${herinner}">✉️ Herinnering</a>` : ''}
           </div></div>`;
       }).join('') : `<p class="muted leeg">${kasFilter.st === 'open' ? 'Niets openstaand — alles is betaald. 🎉' : 'Geen betalingen gevonden.'}</p>`}</div>
     </div>
+    ${rol === 'leiding' && mijnTakken() ? `<p class="muted small">Je ziet alleen de betalingen van: ${mijnTakken().map(esc).join(', ')}. Rekeningnummers zijn afgeschermd; alleen de penningmeester ziet ze volledig.</p>` : rol === 'leiding' ? '<p class="muted small">Rekeningnummers zijn afgeschermd; alleen de penningmeester ziet ze volledig.</p>' : ''}
     <p class="muted small">Je ziet hier alleen financiële gegevens; medische en andere antwoorden blijven alleen zichtbaar voor de leiding.</p>`;
   document.getElementById('uit').onclick = async () => { await api.logout(); location.hash = '#/'; };
   $app.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => { kasFilter.ev = kasFilter.ev === b.dataset.ev ? 'alle' : b.dataset.ev; viewKas(); });
@@ -1286,7 +1289,7 @@ async function viewKas(){
   document.getElementById('kascsv').onclick = () => {
     const kop = ['Evenement', 'Datum van', 'Datum t/m', 'Naam', 'E-mail', 'Betaalkenmerk', 'Bedrag', 'Betaalwijze', 'IBAN', 'Naam rekeninghouder', 'Machtiging op', 'Status', 'Betaald', 'Betaald op'];
     const cel = x => { const t = String(x ?? ''); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const regels = [kop, ...zicht.map(p => [p.ev.titel, p.ev.datum || '', p.ev.datum_tot || '', p.naam, p.email, kenmerk(p), p.bedrag.toFixed(2).replace('.', ','), p.iban ? 'incasso' : 'overmaken', p.iban || '', p.rekeninghouder || '', p.machtiging_op ? fmtMoment(p.machtiging_op) : '', p.status, p.betaald ? 'ja' : 'nee', p.betaald_op ? fmtMoment(p.betaald_op) : ''])].map(r => r.map(cel).join(';'));
+    const regels = [kop, ...zicht.map(p => [p.ev.titel, p.ev.datum || '', p.ev.datum_tot || '', p.naam, p.email, kenmerk(p), p.bedrag.toFixed(2).replace('.', ','), machtiging(p) ? 'incasso' : 'overmaken', p.iban || p.iban_kort || '', p.rekeninghouder || '', p.machtiging_op ? fmtMoment(p.machtiging_op) : '', p.status, p.betaald ? 'ja' : 'nee', p.betaald_op ? fmtMoment(p.betaald_op) : ''])].map(r => r.map(cel).join(';'));
     const url = URL.createObjectURL(new Blob(['﻿' + regels.join('\r\n')], {type:'text/csv;charset=utf-8'}));
     const a = document.createElement('a'); a.href = url; a.download = 'kasoverzicht' + (evSel ? '-' + evSel.slug : '') + '.csv'; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
