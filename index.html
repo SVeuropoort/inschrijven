@@ -109,6 +109,8 @@ button.tak{border:0;background:none;padding:0;font:inherit;color:inherit;text-al
 .sjabloon:hover>span{border-color:var(--green)}
 .sjabloon small{font-size:12px}
 .takblok[hidden]{display:none}
+fieldset.veld.incasso{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--green-2)}
+fieldset.veld.incasso legend{padding:0 6px;margin-left:-6px}
 .linkbox{display:flex;gap:8px;align-items:center;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;overflow-wrap:anywhere;margin:10px 0 14px}
 </style>
 </head>
@@ -188,13 +190,34 @@ const LABELS = {
 };
 const GEAR = '<svg class="gear" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const zetKop = t => { document.getElementById('groepnaam').textContent = t || 'Inschrijven'; };
-const deelWhatsapp = e => 'https://wa.me/?text=' + encodeURIComponent(`Inschrijven voor ${e.titel}${e.datum ? ' (' + fmtKort(e.datum) + ')' : ''}: ${linkVoor(e.slug)}`);
+const deelWhatsapp = e => 'https://wa.me/?text=' + encodeURIComponent(`Inschrijven voor ${e.titel}${e.datum ? ' (' + fmtKortPeriode(e) + ')' : ''}: ${linkVoor(e.slug)}`);
 
 // ── hulpjes ───────────────────────────────────────────────────
 const $app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => Math.random().toString(36).slice(2, 10);
 const fmtDatum = d => d ? new Date(d + 'T12:00').toLocaleDateString('nl-NL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '';
+const fmtPeriode = e => {
+  if (!e?.datum) return '';
+  if (!e.datum_tot || e.datum_tot === e.datum) return fmtDatum(e.datum);
+  const a = new Date(e.datum + 'T12:00'), b = new Date(e.datum_tot + 'T12:00');
+  const opt = {weekday:'short', day:'numeric'};
+  if (a.getMonth() !== b.getMonth() || a.getFullYear() !== b.getFullYear()) opt.month = 'long';
+  if (a.getFullYear() !== b.getFullYear()) opt.year = 'numeric';
+  return a.toLocaleDateString('nl-NL', opt) + ' t/m ' + b.toLocaleDateString('nl-NL', {weekday:'short', day:'numeric', month:'long', year:'numeric'});
+};
+const fmtKortPeriode = e => !e?.datum ? 'Geen datum' : (!e.datum_tot || e.datum_tot === e.datum) ? fmtKort(e.datum)
+  : new Date(e.datum + 'T12:00').toLocaleDateString('nl-NL', {day:'numeric', month:'short'}) + ' – ' + fmtKort(e.datum_tot);
+const eindDatum = e => e.datum_tot || e.datum;
+const ibanSchoon = v => String(v || '').replace(/\s+/g, '').toUpperCase();
+function ibanOk(v){
+  const s = ibanSchoon(v); if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(s)) return false;
+  let n = 0; for (const c of s.slice(4) + s.slice(0, 4)) n = /[A-Z]/.test(c) ? (n * 100 + c.charCodeAt(0) - 55) % 97 : (n * 10 + +c) % 97;
+  return n === 1;
+}
+const ibanMooi = v => ibanSchoon(v).replace(/(.{4})/g, '$1 ').trim();
+const ibanKort = a => a.iban_kort || (a.iban ? ibanSchoon(a.iban).slice(0, 4) + ' •••• •••• ' + ibanSchoon(a.iban).slice(-4) : '');
+const isIncasso = e => Number(e?.kosten) > 0 && e.betaalwijze === 'incasso';
 const fmtKort = d => d ? new Date(d + 'T12:00').toLocaleDateString('nl-NL', {day:'numeric', month:'short', year:'numeric'}) : 'Geen datum';
 const fmtMoment = ts => ts ? new Date(ts).toLocaleString('nl-NL', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
 const fmtEuro = n => Number(n || 0).toLocaleString('nl-NL', {style:'currency', currency:'EUR'});
@@ -240,7 +263,7 @@ function demoApi(){
         {id:uid(), naam:'Demo leiding', rol:'leiding', speltakken:[], wachtwoord:'leiding-demo', aangemaakt:new Date().toISOString(), laatst_gebruikt:null},
         {id:uid(), naam:'Demo penningmeester', rol:'penningmeester', speltakken:[], wachtwoord:'kas-demo', aangemaakt:new Date().toISOString(), laatst_gebruikt:null}
       ],
-      evenementen: [{id, slug:'voorbeeld-dropping', titel:'Voorbeeld: Dropping', omschrijving:'Dit is een voorbeeldevenement in de demo-modus.\nVerzamelen om 19:30 bij het clubhuis, terug rond 23:00.', datum:d, tijd:'19:30 – 23:00', locatie:'Clubhuis', kosten:7.5, betaalinfo:'Maak het bedrag over o.v.v. naam deelnemer + "dropping".', doelgroep:'beide', speltakken:['RSA 782 Explorers','Wilde Vaart'], max_deelnemers:20, deadline:null, open:true, aangemaakt:new Date().toISOString(),
+      evenementen: [{id, slug:'voorbeeld-dropping', titel:'Voorbeeld: Dropping', omschrijving:'Dit is een voorbeeldevenement in de demo-modus.\nVerzamelen om 19:30 bij het clubhuis, terug rond 23:00.', datum:d, datum_tot:null, betaalwijze:'overmaken', tijd:'19:30 – 23:00', locatie:'Clubhuis', kosten:7.5, betaalinfo:'Maak het bedrag over o.v.v. naam deelnemer + "dropping".', doelgroep:'beide', speltakken:['RSA 782 Explorers','Wilde Vaart'], max_deelnemers:20, deadline:null, open:true, aangemaakt:new Date().toISOString(),
         velden:[{id:v1,label:'Speltak',type:'keuze',verplicht:true,opties:['RSA 782 Explorers','Wilde Vaart']},{id:v2,label:'Allergieën / dieetwensen',type:'lang',verplicht:false},{id:v3,label:'Telefoonnummer bij nood',type:'tekst',verplicht:true},{id:v4,label:'Mogen er foto\'s van de deelnemer gemaakt en gedeeld worden?',type:'janee',verplicht:true}]}],
       aanmeldingen: [
         {id:uid(), evenement_id:id, naam:'Voorbeeld Deelnemer', email:'ouder@example.com', telefoon:'0600000000', antwoorden:{[v1]:'RSA 782 Explorers',[v2]:'Geen noten',[v3]:'0600000001',[v4]:'Ja'}, opmerking:'', status:'ingeschreven', betaald:true, betaald_op:new Date(Date.now() - 864e5).toISOString(), aangemaakt:new Date(Date.now() - 2 * 864e5).toISOString()},
@@ -297,8 +320,8 @@ function demoApi(){
     },
     async sjablonen(){ eis('leiding'); return {...load().sjablonen}; },
     async sjabloonOpslaan(tak, data){ eis('leiding'); const mt = info(tok()); if (mt.rol === 'leiding' && mt.speltakken.length && !mt.speltakken.includes(tak)) throw new Error('Je mag alleen sjablonen van jouw speltak(ken) aanpassen.'); const s = load(); if (data == null) delete s.sjablonen[tak]; else s.sjablonen[tak] = data; save(); },
-    async bewijs(id){ const s = load(), a = s.aanmeldingen.find(x => x.id === id); return a ? {aanmelding:a, evenement:s.evenementen.find(e => e.id === a.evenement_id)} : null; },
-    async kas(){ eis('leiding', 'penningmeester'); const s = load(), betalend = new Set(s.evenementen.filter(e => Number(e.kosten) > 0).map(e => e.id)); const toegestaan = new Set(s.evenementen.filter(e => mag(e.speltakken)).map(e => e.id)); return s.aanmeldingen.filter(a => betalend.has(a.evenement_id) && toegestaan.has(a.evenement_id)).map(({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt}) => ({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt})); },
+    async bewijs(id){ const s = load(), a = s.aanmeldingen.find(x => x.id === id); if (!a) return null; const {iban, ...rest} = a; return {aanmelding:{...rest, iban_kort:ibanKort(a)}, evenement:s.evenementen.find(e => e.id === a.evenement_id)}; },
+    async kas(){ eis('leiding', 'penningmeester'); const s = load(), betalend = new Set(s.evenementen.filter(e => Number(e.kosten) > 0).map(e => e.id)); const toegestaan = new Set(s.evenementen.filter(e => mag(e.speltakken)).map(e => e.id)); return s.aanmeldingen.filter(a => betalend.has(a.evenement_id) && toegestaan.has(a.evenement_id)).map(({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt, iban, rekeninghouder, machtiging_op}) => ({id, evenement_id, naam, email, status, betaald, betaald_op, aangemaakt, iban, rekeninghouder, machtiging_op})); },
     async kasBetaald(id, b){ eis('leiding', 'penningmeester'); const a0 = load().aanmeldingen.find(a => a.id === id); if (!mag(load().evenementen.find(e => e.id === a0?.evenement_id)?.speltakken)) throw new Error('Dit evenement hoort niet bij jouw speltak.'); Object.assign(load().aanmeldingen.find(a => a.id === id), {betaald:b, betaald_op:b ? new Date().toISOString() : null}); save(); },
     async evenementen(){ return [...load().evenementen].sort((a, b) => (a.datum || '9') < (b.datum || '9') ? -1 : 1); },
     async evenement(slug){ return load().evenementen.find(e => e.slug === slug) || null; },
@@ -310,12 +333,20 @@ function demoApi(){
       if (!isOpen(e)) throw new Error('De inschrijving voor dit evenement is gesloten.');
       const st = e.max_deelnemers && telIn(e.id) >= e.max_deelnemers ? 'wachtlijst' : 'ingeschreven';
       const nid = crypto.randomUUID ? crypto.randomUUID() : uid() + uid();
-      mem.aanmeldingen.push({id:nid, evenement_id:e.id, ...d, status:st, betaald:false, betaald_op:null, aangemaakt:new Date().toISOString()}); save(); return {id:nid, status:st};
+      let iban = null, rekeninghouder = null;
+      if (isIncasso(e)) {
+        if (!ibanOk(d.iban)) throw new Error('Het IBAN-rekeningnummer klopt niet. Controleer het nog eens.');
+        if (!String(d.rekeninghouder || '').trim()) throw new Error('Vul de naam van de rekeninghouder in.');
+        iban = ibanSchoon(d.iban); rekeninghouder = d.rekeninghouder.trim();
+      }
+      mem.aanmeldingen.push({id:nid, evenement_id:e.id, ...d, iban, rekeninghouder, machtiging_op:iban ? new Date().toISOString() : null, status:st, betaald:false, betaald_op:null, aangemaakt:new Date().toISOString()}); save(); return {id:nid, status:st};
     },
-    async aanmeldingen(id){ eisEv(id); return load().aanmeldingen.filter(a => a.evenement_id === id); },
+    async aanmeldingen(id){ eisEv(id); return load().aanmeldingen.filter(a => a.evenement_id === id).map(({iban, ...r}) => ({...r, iban_kort:iban ? ibanKort({iban}) : null})); },
     async opslaanEvenement(ev){
       eis('leiding'); const s = load();
       if (!mag(ev.speltakken)) throw new Error('Je mag alleen formulieren maken voor jouw speltak(ken). Kies minstens één van jouw speltakken.');
+      if (ev.datum_tot && (!ev.datum || ev.datum_tot < ev.datum)) throw new Error('De einddatum moet op of na de begindatum liggen.');
+      ev = {...ev, datum_tot:ev.datum_tot === ev.datum ? null : ev.datum_tot ?? null, betaalwijze:ev.betaalwijze || 'overmaken'};
       if (ev.id) eisEv(ev.id);
       if (s.evenementen.some(x => x.slug === ev.slug && x.id !== ev.id)) throw new Error('duplicate');
       if (!ev.id) { ev = {...ev, id:uid(), aangemaakt:new Date().toISOString()}; s.evenementen.push(ev); }
@@ -360,7 +391,7 @@ async function supaApi(){
     async evenement(slug){ return ok(await sb.from('evenementen').select('*').eq('slug', slug).maybeSingle()); },
     async evenementById(id){ return ok(await sb.from('evenementen').select('*').eq('id', id).maybeSingle()); },
     async bezetting(id){ return rpc('bezetting', {p_evenement:id}); },
-    async inschrijven(slug, d){ return rpc('inschrijven', {p_slug:slug, p_naam:d.naam, p_email:d.email, p_telefoon:d.telefoon, p_antwoorden:d.antwoorden, p_opmerking:d.opmerking}); },
+    async inschrijven(slug, d){ return rpc('inschrijven', {p_slug:slug, p_naam:d.naam, p_email:d.email, p_telefoon:d.telefoon, p_antwoorden:d.antwoorden, p_opmerking:d.opmerking, p_iban:d.iban || null, p_rekeninghouder:d.rekeninghouder || null}); },
     async aanmeldingen(id){ return rpc('l_aanmeldingen', {p_token:tok(), p_evenement:id}); },
     async opslaanEvenement(ev){ return rpc('l_evenement_opslaan', {p_token:tok(), p_ev:ev}); },
     async verwijderEvenement(id){ return rpc('l_evenement_verwijderen', {p_token:tok(), p_id:id}); },
@@ -372,11 +403,11 @@ async function supaApi(){
 // ── openbaar: overzicht ───────────────────────────────────────
 async function viewOverzicht(){
   const vandaag = new Date().toISOString().slice(0, 10);
-  const lijst = (await api.evenementen()).filter(e => isOpen(e) && (!e.datum || e.datum >= vandaag));
+  const lijst = (await api.evenementen()).filter(e => isOpen(e) && (!e.datum || eindDatum(e) >= vandaag));
   $app.innerHTML = `<h1>Inschrijven</h1><p class="muted">Kies hieronder het evenement waarvoor je wilt inschrijven.</p>
     ${lijst.length ? lijst.map(e => `<a class="card" style="display:block;text-decoration:none;color:inherit" href="#/e/${encodeURIComponent(e.slug)}">
       <h2>${esc(e.titel)}</h2>
-      <div class="meta"><span class="pill">📅 ${esc(fmtDatum(e.datum) || 'Datum volgt')}</span>${e.locatie ? `<span class="pill">📍 ${esc(e.locatie)}</span>` : ''}${Number(e.kosten) ? `<span class="pill">💶 ${fmtEuro(e.kosten)}</span>` : ''}</div>
+      <div class="meta"><span class="pill">📅 ${esc(fmtPeriode(e) || 'Datum volgt')}</span>${e.locatie ? `<span class="pill">📍 ${esc(e.locatie)}</span>` : ''}${Number(e.kosten) ? `<span class="pill">💶 ${fmtEuro(e.kosten)}</span>` : ''}</div>
       ${takPills(e.speltakken)}
       <span class="btn">Inschrijven voor ${esc(e.titel)} →</span></a>`).join('')
     : `<div class="card leeg"><h2>Er staan nu geen inschrijvingen open</h2><p class="muted">Heb je een link gekregen? Open die dan direct.</p></div>`}`;
@@ -416,7 +447,7 @@ async function viewFormulier(slug){
   $app.innerHTML = `<div class="card">
       <h1>${esc(e.titel)}</h1>
       <div class="meta">
-        ${e.datum ? `<span class="pill">📅 ${esc(fmtDatum(e.datum))}</span>` : ''}${e.tijd ? `<span class="pill">🕖 ${esc(e.tijd)}</span>` : ''}
+        ${e.datum ? `<span class="pill">📅 ${esc(fmtPeriode(e))}</span>` : ''}${e.tijd ? `<span class="pill">🕖 ${esc(e.tijd)}</span>` : ''}
         ${e.locatie ? `<span class="pill">📍 ${esc(e.locatie)}</span>` : ''}${Number(e.kosten) ? `<span class="pill">💶 ${fmtEuro(e.kosten)}</span>` : ''}
         ${plekken !== null && open ? `<span class="pill ${plekken === 0 ? 'dicht' : plekken <= 3 ? 'warn' : ''}">${plekken === 0 ? 'Vol – wachtlijst' : plekken + ' plek' + (plekken === 1 ? '' : 'ken') + ' vrij'}</span>` : ''}
         ${e.deadline && open ? `<span class="pill warn">⏰ Inschrijven t/m ${esc(fmtMoment(e.deadline))}</span>` : ''}
@@ -439,11 +470,21 @@ async function viewFormulier(slug){
         <label class="veld"><span><span id="l-tel">${LABELS[wie].tel}</span> <span class="req">*</span></span><input type="tel" name="telefoon" autocomplete="tel" maxlength="50" required value="${esc(laatsteContact.telefoon || '')}"></label>
       </div>
       ${(e.velden || []).map(veldHtml).join('')}
+      ${isIncasso(e) ? `<fieldset class="veld incasso"><legend>🏦 Machtiging automatische incasso</legend>
+        <p class="small" style="margin:0 0 12px">De kosten van <b>${fmtEuro(e.kosten)}</b> worden via automatische incasso afgeschreven${plekken === 0 ? ', maar pas als er een plek vrijkomt' : ''}.${e.betaalinfo ? ' ' + esc(e.betaalinfo) : ''}</p>
+        <label class="veld"><span>IBAN-rekeningnummer <span class="req">*</span></span><input type="text" name="iban" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="42" placeholder="NL00 BANK 0123 4567 89" required style="font-family:ui-monospace,Menlo,Consolas,monospace"></label>
+        <label class="veld"><span>Naam rekeninghouder <span class="req">*</span></span><input type="text" name="rekeninghouder" autocomplete="name" maxlength="120" required placeholder="zoals op de bankpas"></label>
+        <label class="check"><input type="checkbox" name="machtiging" required><span>Ik geef ${esc(CONFIG.GROEP)} toestemming om eenmalig <b>${fmtEuro(e.kosten)}</b> voor ${esc(e.titel)} af te schrijven van deze rekening. <span class="req">*</span></span></label>
+      </fieldset>` : ''}
       <label class="veld"><span>Opmerkingen</span><textarea name="opmerking" rows="2" maxlength="2000"></textarea></label>
       <button class="btn blok" type="submit">${plekken === 0 ? 'Aanmelden voor wachtlijst ' + esc(e.titel) : 'Inschrijven voor ' + esc(e.titel)}</button>
       <p class="muted small" style="margin:10px 0 0">Je gegevens zijn alleen zichtbaar voor de leiding en worden alleen voor dit evenement gebruikt.</p>
     </form>`}`;
   const f = document.getElementById('f'); if (!f) return;
+  if (f.iban) {
+    f.iban.value = laatsteContact.iban ? ibanMooi(laatsteContact.iban) : ''; f.rekeninghouder.value = laatsteContact.rekeninghouder || '';
+    f.iban.addEventListener('blur', () => { if (ibanOk(f.iban.value)) f.iban.value = ibanMooi(f.iban.value); });
+  }
   f.querySelectorAll('input[name=wie]').forEach(r => r.addEventListener('change', () => {
     const L = LABELS[r.value];
     document.getElementById('l-naam').textContent = L.naam;
@@ -465,11 +506,13 @@ async function viewFormulier(slug){
     }
     const wieNu = fd.get('wie') === 'zelf' ? 'zelf' : 'ouder';
     antwoorden._wie = wieNu;
-    const d = {naam:String(fd.get('naam')).trim(), email:String(fd.get('email')).trim(), telefoon:String(fd.get('telefoon')).trim(), opmerking:String(fd.get('opmerking') || '').trim(), antwoorden};
+    if (isIncasso(e) && !ibanOk(fd.get('iban'))) { f.iban.focus(); return toonFout('Dit IBAN-rekeningnummer klopt niet. Controleer het nog eens (bijvoorbeeld NL91 ABNA 0417 1643 00).'); }
+    const d = {naam:String(fd.get('naam')).trim(), email:String(fd.get('email')).trim(), telefoon:String(fd.get('telefoon')).trim(), opmerking:String(fd.get('opmerking') || '').trim(), antwoorden,
+      ...(isIncasso(e) ? {iban:ibanSchoon(fd.get('iban')), rekeninghouder:String(fd.get('rekeninghouder')).trim()} : {})};
     const knop = f.querySelector('button[type=submit]'); knop.disabled = true; knop.textContent = 'Bezig…';
     try {
       const res = await api.inschrijven(e.slug, d);
-      laatsteContact = {email:d.email, telefoon:d.telefoon, wie:wieNu};
+      laatsteContact = {email:d.email, telefoon:d.telefoon, wie:wieNu, iban:d.iban || laatsteContact.iban, rekeninghouder:d.rekeninghouder || laatsteContact.rekeninghouder};
       viewBedankt(e, {id:res.id, ...d, status:res.status, betaald:false, betaald_op:null, aangemaakt:new Date().toISOString()}, true);
     } catch (err) { toonFout(vriendelijk(err)); knop.disabled = false; knop.textContent = 'Opnieuw proberen'; }
   });
@@ -495,7 +538,8 @@ function viewBedankt(e, a, net){
     <button class="btn blok" id="pdf">📄 Download inschrijfbewijs (PDF)</button>
     <p class="muted small" style="margin:12px 0 4px">Bewaar deze persoonlijke link om je bewijs later opnieuw te downloaden:</p>
     <div class="linkbox"><span style="flex:1">${esc(link)}</span><button class="btn sec" style="padding:6px 10px;font-size:13px" id="kopbewijs">Kopieer</button></div>
-    ${!wacht && !af && Number(e.kosten) ? `<h2>Betalen</h2><p>De kosten zijn <b>${fmtEuro(e.kosten)}</b>. Vermeld betaalkenmerk <b>${kenmerk(a)}</b>.</p>${e.betaalinfo ? `<p class="tekst">${esc(e.betaalinfo)}</p>` : ''}<p class="small">Status: ${a.betaald ? '<b>betaald</b> ✅' : 'nog niet betaald'}</p>` : ''}
+    ${!af && isIncasso(e) && ibanKort(a) ? `<h2>Betalen</h2><p>De kosten van <b>${fmtEuro(e.kosten)}</b> worden ${wacht ? 'pas bij plaatsing ' : ''}via automatische incasso afgeschreven van <b>${esc(ibanKort(a))}</b> t.n.v. <b>${esc(a.rekeninghouder || '')}</b> (kenmerk ${kenmerk(a)}).</p>${e.betaalinfo ? `<p class="tekst">${esc(e.betaalinfo)}</p>` : ''}<p class="small">Status: ${a.betaald ? '<b>afgeschreven</b> ✅' : 'nog niet afgeschreven'}</p>` : ''}
+    ${!wacht && !af && Number(e.kosten) && !isIncasso(e) ? `<h2>Betalen</h2><p>De kosten zijn <b>${fmtEuro(e.kosten)}</b>. Vermeld betaalkenmerk <b>${kenmerk(a)}</b>.</p>${e.betaalinfo ? `<p class="tekst">${esc(e.betaalinfo)}</p>` : ''}<p class="small">Status: ${a.betaald ? '<b>betaald</b> ✅' : 'nog niet betaald'}</p>` : ''}
     ${net ? `<div class="rij" style="margin-top:8px"><a class="btn sec" href="#/e/${encodeURIComponent(e.slug)}" id="nogeen">Nog iemand inschrijven</a><a class="btn sec" href="#/">Overzicht</a></div>` : ''}
   </div>`;
   const knop = document.getElementById('pdf');
@@ -576,7 +620,7 @@ async function tekenBewijs(doc, e, a){
   const titel = doc.splitTextToSize(pdfTekst(e.titel), Math.max(80, bx - M - 4));
   doc.text(titel, M, y); y += titel.length * 7;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(...PDF.grijs);
-  const sub = [fmtDatum(e.datum), e.tijd, e.locatie].filter(Boolean).join('  |  ');
+  const sub = [fmtPeriode(e), e.tijd, e.locatie].filter(Boolean).join('  |  ');
   if (sub) { const sl = doc.splitTextToSize(pdfTekst(sub), Math.max(80, bx - M - 4)); doc.text(sl, M, y); y += sl.length * 5; }
   y = Math.max(y, top + 26) + 2;
   const wacht = a.status === 'wachtlijst', af = a.status === 'afgemeld';
@@ -597,9 +641,19 @@ async function tekenBewijs(doc, e, a){
   if (Number(e.kosten)) {
     y = pdfSectie(doc, 'Betaling', y + 4);
     y = pdfRij(doc, 'Bedrag', pdfEuro(e.kosten), y);
-    y = pdfRij(doc, 'Betaalkenmerk', kenmerk(a) + ' (vermeld dit bij je betaling)', y);
-    y = pdfRij(doc, 'Status', a.betaald ? 'Betaald' + (a.betaald_op ? ' op ' + fmtMoment(a.betaald_op) : '') : (wacht || af ? 'Niet van toepassing' : 'Nog niet betaald'), y);
-    if (e.betaalinfo && !a.betaald) y = pdfRij(doc, 'Hoe betalen', e.betaalinfo, y);
+    if (isIncasso(e) && ibanKort(a)) {
+      y = pdfRij(doc, 'Betaalwijze', 'Automatische incasso (eenmalig)' + (wacht ? ', pas bij plaatsing' : ''), y);
+      y = pdfRij(doc, 'Rekening', ibanKort(a).replace(/•/g, '*'), y);
+      y = pdfRij(doc, 'Rekeninghouder', a.rekeninghouder, y);
+      y = pdfRij(doc, 'Machtiging gegeven', a.machtiging_op ? fmtMoment(a.machtiging_op) : fmtMoment(a.aangemaakt), y);
+      y = pdfRij(doc, 'Kenmerk', kenmerk(a), y);
+      y = pdfRij(doc, 'Status', a.betaald ? 'Afgeschreven' + (a.betaald_op ? ' op ' + fmtMoment(a.betaald_op) : '') : (af ? 'Niet van toepassing' : 'Nog niet afgeschreven'), y);
+      if (e.betaalinfo) y = pdfRij(doc, 'Toelichting', e.betaalinfo, y);
+    } else {
+      y = pdfRij(doc, 'Betaalkenmerk', kenmerk(a) + ' (vermeld dit bij je betaling)', y);
+      y = pdfRij(doc, 'Status', a.betaald ? 'Betaald' + (a.betaald_op ? ' op ' + fmtMoment(a.betaald_op) : '') : (wacht || af ? 'Niet van toepassing' : 'Nog niet betaald'), y);
+      if (e.betaalinfo && !a.betaald) y = pdfRij(doc, 'Hoe betalen', e.betaalinfo, y);
+    }
   }
 }
 function pdfVoet(doc){
@@ -679,7 +733,9 @@ async function viewBeheer(){
   const o = await api.beheerOverzicht();
   const nu = getoond; getoond = null;
   const loginLink = location.href.split('#')[0] + '#/admin';
-  const deelTekst = p => `Je inlog voor de inschrijvingen van ${CONFIG.GROEP}:\n${loginLink}\nWachtwoord: ${p.pw}`;
+  const deelTekst = p => p.rol === 'penningmeester'
+    ? `Je inlog als penningmeester voor de inschrijvingen van ${CONFIG.GROEP}:\n${location.href.split('#')[0]}#/kas\nWachtwoord: ${p.pw}`
+    : `Je inlog voor de inschrijvingen van ${CONFIG.GROEP}:\n${loginLink}\nWachtwoord: ${p.pw}`;
   $app.innerHTML = `<div class="rij tussen" style="margin-bottom:14px"><h1 style="margin:0">${GEAR} Beheer</h1>
       <div class="rij"><a class="btn sec" href="#/admin">Naar evenementen</a><button class="btn sec" id="sluit">Beheer sluiten</button></div></div>
     ${o.tijdelijk ? `<div class="melding"><b>Je gebruikt nog de tijdelijke beheercode 1881.</b> Stel onderaan een eigen code in — daarna werkt 1881 niet meer.</div>` : ''}
@@ -747,7 +803,7 @@ async function viewBeheer(){
     ev.preventDefault(); fout('fout-nieuw');
     const naam = nf.naam.value.trim(), pw = nf.pw.value.trim();
     if (!naam) return fout('fout-nieuw', 'Geef de toegang een naam.');
-    try { await api.toegangOpslaan({naam, rol:nf.rol.value, wachtwoord:pw, speltakken:gekozenUit(nf, 'tk')}); getoond = {naam, pw}; toast('Toegang aangemaakt'); viewBeheer(); window.scrollTo(0, 0); }
+    try { await api.toegangOpslaan({naam, rol:nf.rol.value, wachtwoord:pw, speltakken:gekozenUit(nf, 'tk')}); getoond = {naam, pw, rol:nf.rol.value}; toast('Toegang aangemaakt'); viewBeheer(); window.scrollTo(0, 0); }
     catch (err) { fout('fout-nieuw', vriendelijk(err)); }
   });
   const lijst = document.getElementById('toeg');
@@ -770,7 +826,7 @@ async function viewBeheer(){
     if (f.dataset.pw) {
       const t = o.toegangen.find(x => x.id === f.dataset.pw), pw = f.pw.value.trim();
       if (pw.length < 8) return toast('Het wachtwoord moet minstens 8 tekens lang zijn.');
-      try { await api.toegangOpslaan({id:t.id, naam:t.naam, rol:t.rol, wachtwoord:pw, speltakken:t.speltakken || []}); pwToegang = null; getoond = {naam:t.naam, pw}; await viewBeheer(); window.scrollTo(0, 0); }
+      try { await api.toegangOpslaan({id:t.id, naam:t.naam, rol:t.rol, wachtwoord:pw, speltakken:t.speltakken || []}); pwToegang = null; getoond = {naam:t.naam, pw, rol:t.rol}; await viewBeheer(); window.scrollTo(0, 0); }
       catch (err) { toast(vriendelijk(err)); }
       return;
     }
@@ -792,7 +848,7 @@ const V = (label, type, verplicht = false, opties) => ({label, type, verplicht, 
 const ZWEM = ['Geen zwemdiploma', 'A', 'B', 'C', 'Hoger'];
 const FOTO = V('Mogen er foto\'s van de deelnemer gemaakt en gedeeld worden?', 'janee', true);
 const OMSCHRIJVING = (meenemen = '…') => `Wat gaan we doen?\n…\n\nVerzamelen: … om … uur bij …\nOphalen: … om … uur bij …\nMeenemen: ${meenemen}\nKleding: scoutingblouse en das, …`;
-const BETAALINFO = 'Maak het bedrag over naar … t.n.v. Scouting Hellevoetsluis, onder vermelding van het betaalkenmerk.';
+const BETAALINFO = '';
 const jongJeugd = (tak, extra = []) => ({
   doelgroep:'ouders', speltakken:[tak], omschrijving:OMSCHRIJVING('…'),
   velden:[V('Speltak', 'keuze', true, [tak]), V('Geboortedatum', 'datum'), V('Allergieën / dieetwensen', 'lang'), V('Medicijngebruik', 'lang'),
@@ -834,7 +890,7 @@ const sjabloonBadge = (s, size) => s.sleutel === '_groep' || s.sleutel === 'Leid
   ? (LOGO.groep ? `<img class="badge" src="${LOGO.groep}" alt="" style="height:${Math.round(size * .7)}px;width:auto">` : '') : badge(s.sleutel, size);
 function conceptUitSjabloon(s, eigen){
   const d = JSON.parse(JSON.stringify({...s, ...(eigen || {})}));
-  return {titel:'', slug:'', omschrijving:d.omschrijving || '', datum:null, tijd:d.tijd || '', locatie:d.locatie || '', kosten:Number(d.kosten) || 0,
+  return {titel:'', slug:'', omschrijving:d.omschrijving || '', datum:null, datum_tot:null, betaalwijze:d.betaalwijze || 'incasso', tijd:d.tijd || '', locatie:d.locatie || '', kosten:Number(d.kosten) || 0,
     betaalinfo:d.betaalinfo ?? BETAALINFO, doelgroep:d.doelgroep || 'beide', speltakken:d.speltakken || [], max_deelnemers:d.max_deelnemers ?? null,
     deadline:null, open:true, velden:(d.velden || []).map(v => ({...v, id:uid(), opties:[...(v.opties || [])]})),
     _sjabloon:{sleutel:s.sleutel, naam:sjabloonNaam(s), voorbeeld:s.voorbeeld}};
@@ -871,7 +927,7 @@ async function viewAdmin(){
     ${lijst.length ? lijst.map((e, i) => {
       const status = !e.open ? ['dicht', 'Gesloten'] : !isOpen(e) ? ['dicht', 'Termijn verlopen'] : ['', 'Open'];
       return `<div class="card"><h2>${esc(e.titel)}</h2>
-        <div class="meta"><span class="pill ${status[0]}">${status[1]}</span><span class="pill">📅 ${esc(fmtKort(e.datum))}</span><span class="pill">👥 ${tellingen[i]}${e.max_deelnemers ? ' / ' + e.max_deelnemers : ''}</span></div>
+        <div class="meta"><span class="pill ${status[0]}">${status[1]}</span><span class="pill">📅 ${esc(fmtKortPeriode(e))}</span>${isIncasso(e) ? '<span class="pill">🏦 incasso</span>' : ''}<span class="pill">👥 ${tellingen[i]}${e.max_deelnemers ? ' / ' + e.max_deelnemers : ''}</span></div>
         ${takPills(e.speltakken, 22)}
         <div class="rij"><a class="btn" href="#/admin/e/${e.id}">Aanmeldingen</a><a class="btn sec" href="#/admin/bewerk/${e.id}">Bewerken</a><button class="btn sec" data-link="${esc(e.slug)}">Link kopiëren</button></div></div>`;
     }).join('') : `<div class="card leeg"><h2>Nog geen evenementen</h2><p class="muted">Maak je eerste inschrijfformulier aan.</p><a class="btn" href="#/admin/nieuw">+ Nieuw evenement</a></div>`}`;
@@ -894,7 +950,7 @@ function veldenEditorHtml(velden){
 
 async function viewEditor(id){
   let st;
-  if (id === 'nieuw') st = {titel:'', slug:'', omschrijving:'', datum:null, tijd:'', locatie:'', kosten:0, betaalinfo:'', doelgroep:'beide', speltakken:mijnTakken()?.length === 1 ? [...mijnTakken()] : [], max_deelnemers:null, deadline:null, open:true, velden:[{id:uid(), ...PRESETS[0], opties:[...SPELTAKKEN]}]};
+  if (id === 'nieuw') st = {titel:'', slug:'', omschrijving:'', datum:null, datum_tot:null, betaalwijze:'incasso', tijd:'', locatie:'', kosten:0, betaalinfo:'', doelgroep:'beide', speltakken:mijnTakken()?.length === 1 ? [...mijnTakken()] : [], max_deelnemers:null, deadline:null, open:true, velden:[{id:uid(), ...PRESETS[0], opties:[...SPELTAKKEN]}]};
   else if (id === 'kopie' && kopieConcept) { st = kopieConcept; kopieConcept = null; }
   else if (id === 'kopie') { location.hash = '#/admin/nieuw'; return; }
   else { const e = await api.evenementById(id); if (!e) throw new Error('Evenement niet gevonden.'); if (!magTakken(e.speltakken)) throw new Error('Dit evenement hoort niet bij jouw speltak.'); st = JSON.parse(JSON.stringify(e)); }
@@ -910,9 +966,10 @@ async function viewEditor(id){
     <div class="card"><h2>Gegevens</h2>
       <label class="veld"><span>Titel <span class="req">*</span></span><input type="text" name="titel" value="${esc(st.titel)}" required maxlength="120" placeholder="${esc(st._sjabloon?.voorbeeld || '')}"></label>
       <div class="grid2">
-        <label class="veld"><span>Datum</span><input type="date" name="datum" value="${esc(st.datum || '')}"></label>
-        <label class="veld"><span>Tijd</span><input type="text" name="tijd" value="${esc(st.tijd)}" placeholder="bv. 10:00 – 16:00"></label>
+        <label class="veld"><span>Datum (van)</span><input type="date" name="datum" value="${esc(st.datum || '')}"></label>
+        <label class="veld"><span>Tot en met <span class="muted small">(bij meerdaagse evenementen)</span></span><input type="date" name="datum_tot" value="${esc(st.datum_tot || '')}"></label>
       </div>
+      <label class="veld"><span>Tijd</span><input type="text" name="tijd" value="${esc(st.tijd)}" placeholder="bv. 10:00 – 16:00, of vr 19:00 t/m zo 14:00"></label>
       <label class="veld"><span>Locatie</span><input type="text" name="locatie" value="${esc(st.locatie)}"></label>
       <label class="veld"><span>Omschrijving</span><textarea name="omschrijving" rows="4">${esc(st.omschrijving)}</textarea></label>
       <fieldset class="veld"><legend>Voor welke speltakken?</legend>
@@ -927,9 +984,10 @@ async function viewEditor(id){
         <label class="veld"><span>Maximaal aantal deelnemers</span><input type="number" name="max" min="1" value="${st.max_deelnemers ?? ''}" placeholder="Leeg = onbeperkt"></label>
         <label class="veld"><span>Inschrijven kan tot</span><input type="datetime-local" name="deadline" value="${naarLokaal(st.deadline)}"></label>
         <label class="veld"><span>Kosten (€)</span><input type="text" inputmode="decimal" name="kosten" value="${Number(st.kosten) ? String(st.kosten).replace('.', ',') : ''}" placeholder="0"></label>
+        <label class="veld"><span>Betaalwijze</span><select name="betaalwijze"><option value="incasso" ${(st.betaalwijze || 'overmaken') === 'incasso' ? 'selected' : ''}>Automatische incasso (IBAN + naam vragen)</option><option value="overmaken" ${(st.betaalwijze || 'overmaken') === 'overmaken' ? 'selected' : ''}>Zelf overmaken (met betaalkenmerk)</option></select></label>
         <label class="veld"><span>Korte link</span><input type="text" name="slug" value="${esc(st.slug)}" placeholder="wordt automatisch gemaakt"></label>
       </div>
-      <label class="veld"><span>Betaalinstructie (getoond na inschrijven)</span><textarea name="betaalinfo" rows="2" placeholder="bv. IBAN, t.n.v., omschrijving of Tikkie-link">${esc(st.betaalinfo)}</textarea></label>
+      <label class="veld"><span>Toelichting betaling</span><textarea name="betaalinfo" rows="2" placeholder="Incasso: bv. 'Het bedrag wordt rond 1 juni afgeschreven.' — Overmaken: IBAN, t.n.v. en omschrijving">${esc(st.betaalinfo)}</textarea></label>
       <label class="veld"><span>Wie mag inschrijven?</span><select name="doelgroep">${Object.entries(DOELGROEPEN).map(([k, t]) => `<option value="${k}" ${(st.doelgroep || 'beide') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label class="check"><input type="checkbox" name="open" ${st.open ? 'checked' : ''}><span>Inschrijving staat open</span></label>
       <p class="muted small" style="margin:4px 0 0">Is het vol, dan kunnen ouders zich automatisch op de wachtlijst zetten.</p>
@@ -955,7 +1013,7 @@ async function viewEditor(id){
     const t = f.titel.value.trim() || 'Naam van je evenement';
     const dg = f.doelgroep.value;
     vb.innerHTML = `<b style="font-size:1.15rem">${esc(t)}</b>
-      <div class="meta">${f.datum.value ? `<span class="pill">📅 ${esc(fmtDatum(f.datum.value))}</span>` : ''}${f.tijd.value.trim() ? `<span class="pill">🕖 ${esc(f.tijd.value.trim())}</span>` : ''}${f.locatie.value.trim() ? `<span class="pill">📍 ${esc(f.locatie.value.trim())}</span>` : ''}</div>
+      <div class="meta">${f.datum.value ? `<span class="pill">📅 ${esc(fmtPeriode({datum:f.datum.value, datum_tot:f.datum_tot.value || null}))}</span>` : ''}${(parseFloat(f.kosten.value.replace(',', '.')) || 0) > 0 ? `<span class="pill">💶 ${fmtEuro(parseFloat(f.kosten.value.replace(',', '.')))}${f.betaalwijze.value === 'incasso' ? ' · incasso' : ''}</span>` : ''}${f.tijd.value.trim() ? `<span class="pill">🕖 ${esc(f.tijd.value.trim())}</span>` : ''}${f.locatie.value.trim() ? `<span class="pill">📍 ${esc(f.locatie.value.trim())}</span>` : ''}</div>
       ${takPills(st.speltakken, 24)}
       <div class="muted small">Inschrijfformulier ${esc(t)} · ${dg === 'beide' ? 'kies: 👪 mijn kind / 🙋 mezelf' : dg === 'zelf' ? '🙋 deelnemer schrijft zichzelf in' : '👪 ouder schrijft kind in'}</div>
       <span class="btn blok knop">Inschrijven voor ${esc(t)}</span>
@@ -997,7 +1055,7 @@ async function viewEditor(id){
     box.querySelector('.vraag:last-child input')?.focus();
   });
   const leesFormulier = () => {
-    st.titel = f.titel.value.trim(); st.datum = f.datum.value || null; st.tijd = f.tijd.value.trim(); st.locatie = f.locatie.value.trim();
+    st.titel = f.titel.value.trim(); st.datum = f.datum.value || null; st.datum_tot = f.datum_tot.value || null; st.betaalwijze = f.betaalwijze.value; st.tijd = f.tijd.value.trim(); st.locatie = f.locatie.value.trim();
     st.omschrijving = f.omschrijving.value.trim(); st.betaalinfo = f.betaalinfo.value.trim(); st.open = f.open.checked; st.doelgroep = f.doelgroep.value;
     st.max_deelnemers = f.max.value ? Math.max(1, parseInt(f.max.value, 10)) : null;
     st.deadline = f.deadline.value ? new Date(f.deadline.value).toISOString() : null;
@@ -1010,6 +1068,9 @@ async function viewEditor(id){
     leesFormulier();
     if (!st.titel) return toon('Geef het evenement een titel.');
     if (!magTakken(st.speltakken)) return toon('Kies bij "Voor welke speltakken?" minstens één van jouw speltakken.');
+    if (st.datum_tot && !st.datum) return toon('Vul ook de begindatum in.');
+    if (st.datum_tot && st.datum_tot < st.datum) return toon('De einddatum moet op of na de begindatum liggen.');
+    if (st.datum_tot === st.datum) st.datum_tot = null;
     if ([st.omschrijving, st.betaalinfo, st.tijd, st.locatie].some(t => t.includes('…')) && !confirm('Er staan nog puntjes (…) in de omschrijving of betaalinstructie die je nog niet hebt ingevuld. Toch opslaan?')) return;
     const leeg = st.velden.findIndex(v => !v.label.trim()); if (leeg >= 0) return toon(`Vraag ${leeg + 1} heeft nog geen tekst.`);
     const zonder = st.velden.find(v => ['keuze', 'meerkeuze'].includes(v.type) && !v.opties.length); if (zonder) return toon(`Geef opties op bij "${zonder.label}".`);
@@ -1027,13 +1088,13 @@ async function viewEditor(id){
     leesFormulier();
     const sleutel = document.getElementById('sjkey').value, naam = sjabloonNaam(SJABLONEN.find(x => x.sleutel === sleutel));
     if (!confirm(`Deze opzet bewaren als sjabloon voor ${naam}? Het vorige sjabloon voor ${naam} wordt vervangen.`)) return;
-    const data = {omschrijving:st.omschrijving, tijd:st.tijd, locatie:st.locatie, kosten:st.kosten, betaalinfo:st.betaalinfo, doelgroep:st.doelgroep, speltakken:st.speltakken, max_deelnemers:st.max_deelnemers,
+    const data = {omschrijving:st.omschrijving, tijd:st.tijd, locatie:st.locatie, kosten:st.kosten, betaalwijze:st.betaalwijze, betaalinfo:st.betaalinfo, doelgroep:st.doelgroep, speltakken:st.speltakken, max_deelnemers:st.max_deelnemers,
       velden:st.velden.map(v => ({label:v.label.trim(), type:v.type, verplicht:!!v.verplicht, ...(['keuze', 'meerkeuze'].includes(v.type) ? {opties:v.opties} : {})}))};
     try { await api.sjabloonOpslaan(sleutel, data); toast('Sjabloon bewaard voor ' + naam); } catch (err) { toast(vriendelijk(err)); }
   };
   document.getElementById('kopie')?.addEventListener('click', () => {
     leesFormulier();
-    kopieConcept = {...JSON.parse(JSON.stringify(st)), id:undefined, aangemaakt:undefined, titel:st.titel + ' (kopie)', slug:'', datum:null, deadline:null, open:true};
+    kopieConcept = {...JSON.parse(JSON.stringify(st)), id:undefined, aangemaakt:undefined, titel:st.titel + ' (kopie)', slug:'', datum:null, datum_tot:null, deadline:null, open:true};
     delete kopieConcept.id; delete kopieConcept.aangemaakt;
     location.hash = '#/admin/bewerk/kopie';
   });
@@ -1089,7 +1150,7 @@ async function viewAanmeldingen(id){
   const zicht = alle.filter(a => (filter === 'alle' || a.status === filter) && (!q || (a.naam + ' ' + a.email).toLowerCase().includes(q)));
   const mailLink = 'mailto:?bcc=' + encodeURIComponent([...new Set(inn.map(a => a.email))].join(',')) + '&subject=' + encodeURIComponent(e.titel);
   $app.innerHTML = `<div class="rij tussen" style="margin-bottom:6px"><a href="#/admin" class="small">← Alle evenementen</a><a class="small" href="#/admin/bewerk/${e.id}">Bewerken</a></div>
-    <h1>${esc(e.titel)}</h1><p class="muted" style="margin:0">${esc(fmtDatum(e.datum) || 'Geen datum')}${e.locatie ? ' · ' + esc(e.locatie) : ''}</p>
+    <h1>${esc(e.titel)}</h1><p class="muted" style="margin:0">${esc(fmtPeriode(e) || 'Geen datum')}${e.locatie ? ' · ' + esc(e.locatie) : ''}</p>
     ${takPills(e.speltakken, 26)}
     <div class="stats">
       <div class="stat"><b>${inn.length}${e.max_deelnemers ? ' / ' + e.max_deelnemers : ''}</b><span class="muted small">ingeschreven</span></div>
@@ -1109,6 +1170,7 @@ async function viewAanmeldingen(id){
       <div id="lijst">${zicht.length ? zicht.map(a => `<div class="aanm" data-id="${a.id}">
         <div class="rij tussen"><span class="naamrij">${gekozenTakken(e, a.antwoorden).map(t => badge(t, 34)).join('')}<b>${esc(a.naam)}</b></span><span class="muted small">${esc(fmtMoment(a.aangemaakt))}</span></div>
         <dl>
+          ${a.iban_kort ? `<dt>Incasso</dt><dd>Machtiging gegeven (${esc(a.iban_kort)})</dd>` : ''}
           <dt>Ingeschreven door</dt><dd>${LABELS[a.antwoorden?._wie === 'zelf' ? 'zelf' : 'ouder'].door}</dd>
           <dt>E-mail</dt><dd><a href="mailto:${esc(a.email)}">${esc(a.email)}</a></dd>
           <dt>Telefoon</dt><dd><a href="tel:${esc(a.telefoon)}">${esc(a.telefoon)}</a></dd>
@@ -1170,7 +1232,7 @@ async function viewKas(){
     && (kasFilter.st === 'alle' || (kasFilter.st === 'open' && telt(p) && !p.betaald) || (kasFilter.st === 'betaald' && p.betaald && telt(p)) || (kasFilter.st === 'terug' && !telt(p) && p.betaald))
     && (!q || (p.naam + ' ' + p.email + ' ' + kenmerk(p) + ' ' + p.ev.titel).toLowerCase().includes(q)))
     .sort((a, b) => (a.ev.datum || '') === (b.ev.datum || '') ? a.naam.localeCompare(b.naam) : (b.ev.datum || '') < (a.ev.datum || '') ? -1 : 1);
-  const openInFilter = zicht.filter(p => telt(p) && !p.betaald);
+  const openInFilter = zicht.filter(p => telt(p) && !p.betaald && !p.iban);
   const evSel = kasFilter.ev !== 'alle' ? E[kasFilter.ev] : null;
   const bulkMail = openInFilter.length ? 'mailto:?bcc=' + encodeURIComponent([...new Set(openInFilter.map(p => p.email))].join(',')) + '&subject=' + encodeURIComponent('Betalingsherinnering' + (evSel ? ' ' + evSel.titel : ' ' + CONFIG.GROEP)) + '&body=' + encodeURIComponent(`Beste ouder/deelnemer,\n\nVolgens onze administratie staat er nog een betaling open${evSel ? ' voor ' + evSel.titel + ' (' + fmtEuro(evSel.kosten) + ')' : ''}. Wil je dit overmaken onder vermelding van het betaalkenmerk dat op je inschrijfbewijs staat?${evSel?.betaalinfo ? '\n\n' + evSel.betaalinfo : ''}\n\nHeb je al betaald? Dan kun je deze mail negeren.\n\nMet vriendelijke groet,\nPenningmeester ${CONFIG.GROEP}`) : '';
   $app.innerHTML = `<div class="rij tussen" style="margin-bottom:14px"><h1 style="margin:0">💶 Penningmeester</h1>
@@ -1186,7 +1248,7 @@ async function viewKas(){
         const v = verwacht.filter(p => p.evenement_id === e.id), o = v.filter(p => p.betaald);
         const pct = v.length ? Math.round(o.length / v.length * 100) : 0;
         return `<button class="kasrij ${kasFilter.ev === e.id ? 'aan' : ''}" data-ev="${e.id}">
-          <span class="rij tussen" style="width:100%"><span class="naamrij">${(e.speltakken || []).slice(0, 3).map(t => badge(t, 24)).join('')}<b>${esc(e.titel)}</b></span><span class="muted small">${esc(fmtKort(e.datum))}</span></span>
+          <span class="rij tussen" style="width:100%"><span class="naamrij">${(e.speltakken || []).slice(0, 3).map(t => badge(t, 24)).join('')}<b>${esc(e.titel)}</b>${isIncasso(e) ? ' <span class="pill" style="font-size:11px;padding:1px 7px">🏦 incasso</span>' : ''}</span><span class="muted small">${esc(fmtKortPeriode(e))}</span></span>
           <span class="balk"><span style="width:${pct}%"></span></span>
           <span class="rij tussen small" style="width:100%"><span>${o.length} van ${v.length} betaald · ${fmtEuro(e.kosten)} p.p.</span><span><b>${fmtEuro(som(o))}</b> / ${fmtEuro(som(v))}</span></span>
         </button>`;
@@ -1207,9 +1269,10 @@ async function viewKas(){
         return `<div class="aanm" data-id="${p.id}">
           <div class="rij tussen"><span class="naamrij">${(p.ev.speltakken || []).slice(0, 1).map(t => badge(t, 26)).join('')}<b>${esc(p.naam)}</b></span><b>${fmtEuro(p.bedrag)}</b></div>
           <div class="muted small">${esc(p.ev.titel)} · kenmerk <b style="color:var(--ink)">${kenmerk(p)}</b>${p.status !== 'ingeschreven' ? ` · <span style="color:var(--red)">${esc(p.status)}</span>` : ''}</div>
+          ${p.iban ? `<div class="small" style="margin-top:4px">🏦 <span style="font-family:ui-monospace,Menlo,Consolas,monospace">${esc(ibanMooi(p.iban))}</span> t.n.v. <b>${esc(p.rekeninghouder || '')}</b>${p.machtiging_op ? ` <span class="muted">· machtiging ${esc(fmtMoment(p.machtiging_op))}</span>` : ''}</div>` : (isIncasso(p.ev) ? '<div class="small" style="margin-top:4px;color:var(--red)">Geen machtiging (ingeschreven vóór de incasso aanstond)</div>' : '')}
           <div class="rij" style="margin-top:8px">
-            <label class="check" style="margin:0"><input type="checkbox" data-betaald ${p.betaald ? 'checked' : ''}><span>${p.betaald ? 'Betaald' + (p.betaald_op ? ' <span class="muted small">op ' + esc(fmtMoment(p.betaald_op)) + '</span>' : '') : 'Betaald'}</span></label>
-            ${!p.betaald && telt(p) ? `<a class="btn sec" style="padding:6px 12px;font-size:14px;margin-left:auto" href="${herinner}">✉️ Herinnering</a>` : ''}
+            <label class="check" style="margin:0"><input type="checkbox" data-betaald ${p.betaald ? 'checked' : ''}><span>${p.iban ? 'Afgeschreven' : 'Betaald'}${p.betaald && p.betaald_op ? ' <span class="muted small">op ' + esc(fmtMoment(p.betaald_op)) + '</span>' : ''}</span></label>
+            ${!p.betaald && telt(p) && !p.iban ? `<a class="btn sec" style="padding:6px 12px;font-size:14px;margin-left:auto" href="${herinner}">✉️ Herinnering</a>` : ''}
           </div></div>`;
       }).join('') : `<p class="muted leeg">${kasFilter.st === 'open' ? 'Niets openstaand — alles is betaald. 🎉' : 'Geen betalingen gevonden.'}</p>`}</div>
     </div>
@@ -1221,9 +1284,9 @@ async function viewKas(){
   const zk = document.getElementById('kaszoek');
   zk.addEventListener('input', () => { kasFilter.q = zk.value; clearTimeout(zk._t); zk._t = setTimeout(async () => { await viewKas(); const z = document.getElementById('kaszoek'); z.focus(); z.setSelectionRange(z.value.length, z.value.length); }, 250); });
   document.getElementById('kascsv').onclick = () => {
-    const kop = ['Evenement', 'Datum evenement', 'Naam', 'E-mail', 'Betaalkenmerk', 'Bedrag', 'Status', 'Betaald', 'Betaald op'];
+    const kop = ['Evenement', 'Datum van', 'Datum t/m', 'Naam', 'E-mail', 'Betaalkenmerk', 'Bedrag', 'Betaalwijze', 'IBAN', 'Naam rekeninghouder', 'Machtiging op', 'Status', 'Betaald', 'Betaald op'];
     const cel = x => { const t = String(x ?? ''); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const regels = [kop, ...zicht.map(p => [p.ev.titel, p.ev.datum || '', p.naam, p.email, kenmerk(p), p.bedrag.toFixed(2).replace('.', ','), p.status, p.betaald ? 'ja' : 'nee', p.betaald_op ? fmtMoment(p.betaald_op) : ''])].map(r => r.map(cel).join(';'));
+    const regels = [kop, ...zicht.map(p => [p.ev.titel, p.ev.datum || '', p.ev.datum_tot || '', p.naam, p.email, kenmerk(p), p.bedrag.toFixed(2).replace('.', ','), p.iban ? 'incasso' : 'overmaken', p.iban || '', p.rekeninghouder || '', p.machtiging_op ? fmtMoment(p.machtiging_op) : '', p.status, p.betaald ? 'ja' : 'nee', p.betaald_op ? fmtMoment(p.betaald_op) : ''])].map(r => r.map(cel).join(';'));
     const url = URL.createObjectURL(new Blob(['﻿' + regels.join('\r\n')], {type:'text/csv;charset=utf-8'}));
     const a = document.createElement('a'); a.href = url; a.download = 'kasoverzicht' + (evSel ? '-' + evSel.slug : '') + '.csv'; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
