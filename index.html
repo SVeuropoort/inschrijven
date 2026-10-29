@@ -217,6 +217,7 @@ function ibanOk(v){
 }
 const ibanMooi = v => ibanSchoon(v).replace(/(.{4})/g, '$1 ').trim();
 const ibanKort = a => a.iban_kort || (a.iban ? ibanSchoon(a.iban).slice(0, 4) + ' •••• •••• ' + ibanSchoon(a.iban).slice(-4) : '');
+const kanDelen = () => { try { return typeof navigator.share === 'function' && (!navigator.canShare || navigator.canShare({files:[new File([''], 't.csv', {type:'text/csv'})]})); } catch { return false; } };
 const isIncasso = e => Number(e?.kosten) > 0 && e.betaalwijze === 'incasso';
 const fmtKort = d => d ? new Date(d + 'T12:00').toLocaleDateString('nl-NL', {day:'numeric', month:'short', year:'numeric'}) : 'Geen datum';
 const fmtMoment = ts => ts ? new Date(ts).toLocaleString('nl-NL', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
@@ -1263,6 +1264,7 @@ async function viewKas(){
       <div class="chips">${[['open', 'Openstaand'], ['betaald', 'Betaald'], ['terug', 'Terugbetalen'], ['alle', 'Alles']].map(([k, t]) => `<button class="chip ${kasFilter.st === k ? 'aan' : ''}" data-st="${k}">${t}</button>`).join('')}</div>
       <div class="rij" style="margin-bottom:6px">
         <button class="btn sec" id="kascsv" ${zicht.length ? '' : 'disabled'}>Download Excel (CSV)</button>
+        ${rol === 'penningmeester' && kanDelen() ? `<button class="btn sec" id="kasdeel" ${zicht.length ? '' : 'disabled'}>📤 Delen (naar mail, Drive…)</button>` : ''}
         ${bulkMail ? `<a class="btn sec" href="${bulkMail}">✉️ Herinnering aan ${openInFilter.length} openstaande</a>` : ''}
       </div>
       <p class="muted small" style="margin:0 0 6px">${zicht.length} regel${zicht.length === 1 ? '' : 's'} · ${fmtEuro(som(zicht))}</p>
@@ -1286,13 +1288,30 @@ async function viewKas(){
   $app.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { kasFilter.st = b.dataset.st; viewKas(); });
   const zk = document.getElementById('kaszoek');
   zk.addEventListener('input', () => { kasFilter.q = zk.value; clearTimeout(zk._t); zk._t = setTimeout(async () => { await viewKas(); const z = document.getElementById('kaszoek'); z.focus(); z.setSelectionRange(z.value.length, z.value.length); }, 250); });
-  document.getElementById('kascsv').onclick = () => {
+  const kasBestand = () => {
     const kop = ['Evenement', 'Datum van', 'Datum t/m', 'Naam', 'E-mail', 'Betaalkenmerk', 'Bedrag', 'Betaalwijze', 'IBAN', 'Naam rekeninghouder', 'Machtiging op', 'Status', 'Betaald', 'Betaald op'];
     const cel = x => { const t = String(x ?? ''); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     const regels = [kop, ...zicht.map(p => [p.ev.titel, p.ev.datum || '', p.ev.datum_tot || '', p.naam, p.email, kenmerk(p), p.bedrag.toFixed(2).replace('.', ','), machtiging(p) ? 'incasso' : 'overmaken', p.iban || p.iban_kort || '', p.rekeninghouder || '', p.machtiging_op ? fmtMoment(p.machtiging_op) : '', p.status, p.betaald ? 'ja' : 'nee', p.betaald_op ? fmtMoment(p.betaald_op) : ''])].map(r => r.map(cel).join(';'));
-    const url = URL.createObjectURL(new Blob(['﻿' + regels.join('\r\n')], {type:'text/csv;charset=utf-8'}));
-    const a = document.createElement('a'); a.href = url; a.download = 'kasoverzicht' + (evSel ? '-' + evSel.slug : '') + '.csv'; document.body.append(a); a.click(); a.remove();
+    const naam = 'kasoverzicht' + (evSel ? '-' + evSel.slug : '') + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    return {naam, blob:new Blob(['\ufeff' + regels.join('\r\n')], {type:'text/csv;charset=utf-8'})};
+  };
+  document.getElementById('kascsv').onclick = () => {
+    const {naam, blob} = kasBestand(), url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = naam; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const deelKnop = document.getElementById('kasdeel');
+  if (deelKnop) deelKnop.onclick = async () => {
+    const {naam, blob} = kasBestand();
+    const bestand = new File([blob], naam, {type:'text/csv'});
+    const titel = 'Kasoverzicht ' + (evSel ? evSel.titel : CONFIG.GROEP);
+    try {
+      if (navigator.canShare && !navigator.canShare({files:[bestand]})) throw new Error('niet-ondersteund');
+      await navigator.share({files:[bestand], title:titel, text:titel + ' (' + new Date().toLocaleDateString('nl-NL') + ')'});
+    } catch (err) {
+      if (err?.name === 'AbortError') return;   // gebruiker sloot het deelmenu
+      toast('Delen lukt niet op dit apparaat. Gebruik "Download Excel (CSV)".');
+    }
   };
   document.getElementById('kaslijst').addEventListener('change', async ev => {
     if (!ev.target.matches('[data-betaald]')) return;
