@@ -209,6 +209,8 @@ const fmtPeriode = e => {
 const fmtKortPeriode = e => !e?.datum ? 'Geen datum' : (!e.datum_tot || e.datum_tot === e.datum) ? fmtKort(e.datum)
   : new Date(e.datum + 'T12:00').toLocaleDateString('nl-NL', {day:'numeric', month:'short'}) + ' – ' + fmtKort(e.datum_tot);
 const eindDatum = e => e.datum_tot || e.datum;
+// aanmeldingen worden verwijderd zodra er 14 volle dagen na de laatste dag voorbij zijn
+const opruimDatum = e => { const d = eindDatum(e); if (!d) return null; const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + 15); return x.toISOString().slice(0, 10); };
 const ibanSchoon = v => String(v || '').replace(/\s+/g, '').toUpperCase();
 function ibanOk(v){
   const s = ibanSchoon(v); if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(s)) return false;
@@ -537,7 +539,7 @@ function viewBedankt(e, a, net){
     <h2>Inschrijfbewijs</h2>
     <p style="margin-top:0">Download je bewijs als PDF. Daarop staan al je gegevens${Number(e.kosten) ? ' en het betaalkenmerk' : ''}.</p>
     <button class="btn blok" id="pdf">📄 Download inschrijfbewijs (PDF)</button>
-    <p class="muted small" style="margin:12px 0 4px">Bewaar deze persoonlijke link om je bewijs later opnieuw te downloaden:</p>
+    <p class="muted small" style="margin:12px 0 4px">Bewaar deze persoonlijke link om je bewijs later opnieuw te downloaden${opruimDatum(e) ? ` (kan tot ${esc(fmtKort(opruimDatum(e)))}; daarna worden je gegevens verwijderd — bewaar dus ook de PDF)` : ''}:</p>
     <div class="linkbox"><span style="flex:1">${esc(link)}</span><button class="btn sec" style="padding:6px 10px;font-size:13px" id="kopbewijs">Kopieer</button></div>
     ${!af && isIncasso(e) && ibanKort(a) ? `<h2>Betalen</h2><p>De kosten van <b>${fmtEuro(e.kosten)}</b> worden ${wacht ? 'pas bij plaatsing ' : ''}via automatische incasso afgeschreven van <b>${esc(ibanKort(a))}</b> t.n.v. <b>${esc(a.rekeninghouder || '')}</b> (kenmerk ${kenmerk(a)}).</p>${e.betaalinfo ? `<p class="tekst">${esc(e.betaalinfo)}</p>` : ''}<p class="small">Status: ${a.betaald ? '<b>afgeschreven</b> ✅' : 'nog niet afgeschreven'}</p>` : ''}
     ${!wacht && !af && Number(e.kosten) && !isIncasso(e) ? `<h2>Betalen</h2><p>De kosten zijn <b>${fmtEuro(e.kosten)}</b>. Vermeld betaalkenmerk <b>${kenmerk(a)}</b>.</p>${e.betaalinfo ? `<p class="tekst">${esc(e.betaalinfo)}</p>` : ''}<p class="small">Status: ${a.betaald ? '<b>betaald</b> ✅' : 'nog niet betaald'}</p>` : ''}
@@ -1184,7 +1186,7 @@ async function viewAanmeldingen(id){
           <button class="btn rood" style="padding:6px 12px;font-size:14px" data-weg>Verwijderen</button></div>
       </div>`).join('') : `<p class="muted leeg">${alle.length ? 'Geen aanmeldingen gevonden met dit filter.' : 'Nog geen aanmeldingen. Deel de link met ouders!'}</p>`}</div>
     </div>
-    <p class="muted small">Privacy: verwijder het evenement (of de aanmeldingen) na afloop, zodat medische en contactgegevens niet langer bewaard blijven dan nodig.</p>`;
+    <p class="muted small">🗑️ ${opruimDatum(e) ? `Deze aanmeldingen worden op <b>${esc(fmtDatum(opruimDatum(e)))}</b> automatisch verwijderd (14 dagen na afloop). Download vóór die tijd wat je wilt bewaren. Openstaande betalingen blijven staan tot de penningmeester ze heeft afgehandeld.` : 'Dit evenement heeft geen datum, dus de aanmeldingen worden niet automatisch verwijderd. Verwijder ze zelf na afloop.'}</p>`;
   document.getElementById('link').onclick = () => kopieer(linkVoor(e.slug));
   document.getElementById('csv').onclick = () => downloadCsv(e, alle);
   const pdfKnop = async (knop, lijst, naam) => {
@@ -1281,7 +1283,8 @@ async function viewKas(){
       }).join('') : `<p class="muted leeg">${kasFilter.st === 'open' ? 'Niets openstaand — alles is betaald. 🎉' : 'Geen betalingen gevonden.'}</p>`}</div>
     </div>
     ${rol === 'leiding' && mijnTakken() ? `<p class="muted small">Je ziet alleen de betalingen van: ${mijnTakken().map(esc).join(', ')}. Rekeningnummers zijn afgeschermd; alleen de penningmeester ziet ze volledig.</p>` : rol === 'leiding' ? '<p class="muted small">Rekeningnummers zijn afgeschermd; alleen de penningmeester ziet ze volledig.</p>' : ''}
-    <p class="muted small">Je ziet hier alleen financiële gegevens; medische en andere antwoorden blijven alleen zichtbaar voor de leiding.</p>`;
+    <p class="muted small">Je ziet hier alleen financiële gegevens; medische en andere antwoorden blijven alleen zichtbaar voor de leiding.</p>
+    <p class="muted small">🗑️ 14 dagen na afloop van een evenement worden de aanmeldingen automatisch verwijderd. Openstaande betalingen (nog te betalen of terug te betalen) blijven staan tot je ze hebt afgevinkt. Download de Excel op tijd als je die voor de administratie wilt bewaren.</p>`;
   document.getElementById('uit').onclick = async () => { await api.logout(); location.hash = '#/'; };
   $app.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => { kasFilter.ev = kasFilter.ev === b.dataset.ev ? 'alle' : b.dataset.ev; viewKas(); });
   document.getElementById('kasev').onchange = ev => { kasFilter.ev = ev.target.value; viewKas(); };
